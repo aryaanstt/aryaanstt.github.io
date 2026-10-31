@@ -1,0 +1,38 @@
+/* Dasar bersama opsi N, O, P: ubin bundar, cahaya kursor, angin, pengalaman muncul saat disentuh */
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; background: var(--latar); color: var(--teks); font: 400 16.5px/1.6 var(--badan), system-ui, sans-serif; }
+a { color: inherit; text-decoration: none; }
+img { display: block; max-width: 100%; }
+#lampu { position: fixed; inset: 0; z-index: 3; pointer-events: none; background: radial-gradient(440px at var(--x, 70%) var(--y, 25%), var(--cahaya), transparent 74%); }
+.kisi { display: grid; grid-template-columns: repeat(12, 1fr); gap: 12px; width: min(1240px, 100%); margin: 0 auto; padding: 12px; }
+.ubin { position: relative; min-width: 0; padding: 24px; border: 1px solid var(--garis); border-radius: 22px; background: var(--ubin); overflow: hidden; transition: border-color .3s; }
+.ubin::before { content: ""; position: absolute; inset: 0; z-index: 1; background: radial-gradient(300px at var(--a, 50%) var(--b, 50%), var(--cahaya), transparent 72%); opacity: 0; transition: opacity .3s; pointer-events: none; }
+.ubin:hover::before { opacity: 1; }
+.ubin:hover { border-color: var(--garis-kuat); }
+#angin { position: absolute; inset: 0; width: 100%; height: 100%; }
+.potret { padding: 0; }
+.potret img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 12%; filter: brightness(.86) saturate(.92); transition: transform 1.1s cubic-bezier(.2, .8, .2, 1), filter .6s; transform: scale(1.04) translate(var(--px, 0), var(--py, 0)); }
+.potret:hover img { filter: brightness(.98) saturate(1); }
+.proyek { grid-column: span 4; display: flex; flex-direction: column; padding: 12px; }
+.proyek figure { margin: 0; height: 200px; padding: 10px; border-radius: 13px; background: #ece9e1; display: grid; place-items: center; overflow: hidden; }
+.proyek img { max-height: 100%; object-fit: contain; transition: transform .7s cubic-bezier(.2, .8, .2, 1); }
+.proyek:hover img { transform: scale(1.04); }
+.proyek div { padding: 14px 10px 8px; }
+.proyek small { color: var(--lembut); font-size: 13.5px; }
+.proyek h2 { margin: 3px 0 7px; font: 400 23px/1.16 var(--judul), Georgia, serif; }
+.proyek p { margin: 0; color: var(--lembut); font-size: 15.5px; }
+.sub { grid-column: span 12; margin: 20px 0 0; padding: 0 12px; color: var(--lembut); font-size: 15px; }
+.sibak { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .5s cubic-bezier(.2, .8, .2, 1); }
+.sibak > div { overflow: hidden; }
+.sibak p { margin: 0; color: var(--lembut); }
+.alami:hover .sibak, .alami:focus-within .sibak, .alami.buka .sibak { grid-template-rows: 1fr; }
+.kontak { grid-column: span 12; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 18px; }
+.kontak b { font: 400 27px/1.05 var(--judul), Georgia, serif; color: var(--aksen); }
+.kontak div { display: flex; flex-wrap: wrap; gap: 22px; }
+.kontak a { color: var(--lembut); transition: color .25s; }
+.kontak a:hover { color: var(--teks); }
+@media (max-width: 860px) {
+  .kisi { padding: 10px; gap: 10px; }
+  .proyek { grid-column: 1 / -1; }
+}

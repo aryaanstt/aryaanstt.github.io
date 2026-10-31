@@ -1,0 +1,659 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Indonesia Fire Hotspots</title>
+<meta name="description" content="Interactive dashboard of NASA FIRMS MODIS fire hotspots in Indonesia, 2003–2025, with rainfall and ENSO.">
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7;
+    --surface: #fcfcfb;
+    --border: rgba(11, 11, 11, 0.10);
+    --ink: #0b0b0b;
+    --ink-2: #52514e;
+    --muted: #898781;
+    --grid: #e1e0d9;
+    --axis: #c3c2b7;
+    --fire: #eb6834;
+    --nino: #e34948;
+    --nina: #2a78d6;
+    --neutral: #b5b3ab;
+    --rain: #2a78d6;
+    --accent: #2a78d6;
+    --land: #f0efec;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --page: #0d0d0d;
+      --surface: #1a1a19;
+      --border: rgba(255, 255, 255, 0.10);
+      --ink: #f0efec;
+      --ink-2: #c3c2b7;
+      --muted: #898781;
+      --grid: #2c2c2a;
+      --axis: #383835;
+      --fire: #d95926;
+      --nino: #e66767;
+      --nina: #3987e5;
+      --neutral: #6b6a64;
+      --rain: #3987e5;
+      --accent: #3987e5;
+      --land: #262624;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --border: rgba(255, 255, 255, 0.10);
+    --ink: #f0efec;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --fire: #d95926;
+    --nino: #e66767;
+    --nina: #3987e5;
+    --neutral: #6b6a64;
+    --rain: #3987e5;
+    --accent: #3987e5;
+    --land: #262624;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 24px 16px 48px; }
+  header h1 { font-size: 1.6rem; margin: 0 0 4px; letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--ink-2); max-width: 820px; }
+  .filters {
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: end;
+    margin: 20px 0 16px; padding: 12px 14px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    position: sticky; top: 0; z-index: 5;
+  }
+  .filters label { display: flex; flex-direction: column; font-size: 0.78rem; color: var(--ink-2); gap: 4px; }
+  select, button {
+    font: inherit; font-size: 0.92rem; color: var(--ink);
+    background: var(--page); border: 1px solid var(--border); border-radius: 7px;
+    padding: 6px 10px; min-height: 36px;
+  }
+  select { min-width: 180px; }
+  button { cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  .filters .note { margin-left: auto; font-size: 0.78rem; color: var(--muted); max-width: 360px; }
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 12px; }
+  .kpi, .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+  .kpi { padding: 14px 16px; }
+  .kpi .label { font-size: 0.78rem; color: var(--ink-2); }
+  .kpi .value { font-size: 1.7rem; font-weight: 650; margin: 2px 0; }
+  .kpi .sub { font-size: 0.8rem; color: var(--muted); }
+  .kpi .value.long { font-size: 1.2rem; line-height: 1.3; padding: 6px 0 4px; }
+  .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 12px; }
+  .card { padding: 14px 14px 8px; min-width: 0; }
+  .card h2 { font-size: 0.98rem; margin: 0; }
+  .card .hint { font-size: 0.8rem; color: var(--muted); margin: 2px 0 6px; }
+  .span-12 { grid-column: span 12; }
+  .span-7 { grid-column: span 7; }
+  .span-5 { grid-column: span 5; }
+  .span-6 { grid-column: span 6; }
+  .chart { width: 100%; height: 300px; }
+  #map { height: auto; aspect-ratio: 2.6; max-height: 500px; }  /* Indonesia is ~2.7x wider than tall */
+  #ts { height: 340px; }
+  #top { height: 350px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 0.8rem; color: var(--ink-2); margin: 0 0 4px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  details { margin: 6px 0 4px; font-size: 0.85rem; }
+  summary { cursor: pointer; color: var(--ink-2); }
+  table { border-collapse: collapse; width: 100%; margin-top: 6px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 3px 8px; border-bottom: 1px solid var(--grid); }
+  th:first-child, td:first-child { text-align: left; }
+  .table-scroll { max-height: 260px; overflow: auto; }
+  footer { margin-top: 24px; font-size: 0.85rem; color: var(--ink-2); }
+  footer h3 { font-size: 0.95rem; color: var(--ink); margin: 18px 0 4px; }
+  footer ul { margin: 4px 0; padding-left: 18px; }
+  a { color: var(--accent); }
+  .offline { display: none; padding: 12px; border: 1px solid var(--border); border-radius: 10px; margin: 12px 0; }
+  @media (max-width: 900px) {
+    .kpis { grid-template-columns: repeat(2, 1fr); }
+    .span-7, .span-5, .span-6 { grid-column: span 12; }
+    .filters { position: static; }
+    .filters .note { margin-left: 0; }
+    #map { aspect-ratio: 1.7; }
+  }
+  @media (max-width: 480px) {
+    select { min-width: 0; width: 100%; }
+    .filters label { flex: 1 1 100%; }
+    .kpi .value { font-size: 1.35rem; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>When and where do Indonesia's fire hotspots spike?</h1>
+    <p>NASA FIRMS MODIS active-fire detections (high confidence, vegetation fires only), CHIRPS rainfall and the NOAA Oceanic Niño Index, 2003–2025. Pick a year or a province, or click a bar in the charts.</p>
+  </header>
+
+  <div class="offline" id="offline">The charts could not load: this page needs an internet connection to download the Plotly.js charting library from cdn.jsdelivr.net.</div>
+
+  <div class="filters" role="group" aria-label="Filters">
+    <label>Year
+      <select id="f-year"></select>
+    </label>
+    <label>Province
+      <select id="f-prov"></select>
+    </label>
+    <button id="reset" type="button">Reset</button>
+    <div class="note">Counts are hotspots (fire pixels seen by the satellite), not number of fires or burned area.</div>
+  </div>
+
+  <section class="kpis" aria-label="Summary">
+    <div class="kpi"><div class="label" id="k1-label">Hotspots</div><div class="value" id="k1"></div><div class="sub" id="k1-sub"></div></div>
+    <div class="kpi"><div class="label">Busiest month</div><div class="value" id="k2"></div><div class="sub" id="k2-sub"></div></div>
+    <div class="kpi"><div class="label" id="k3-label"></div><div class="value" id="k3"></div><div class="sub" id="k3-sub"></div></div>
+    <div class="kpi"><div class="label" id="k4-label"></div><div class="value" id="k4"></div><div class="sub" id="k4-sub"></div></div>
+  </section>
+
+  <section class="grid">
+    <div class="card span-12">
+      <h2>Where</h2>
+      <p class="hint">High-confidence hotspots per 0.25° grid cell (≈ 28 km). Darker = more hotspots. Drag to pan, scroll to zoom, double-click to reset.</p>
+      <div id="map" class="chart"></div>
+    </div>
+
+    <div class="card span-7">
+      <h2 id="annual-title">Hotspots per year</h2>
+      <div class="legend" aria-hidden="true">
+        <span><i style="background:var(--nino)"></i>El Niño year</span>
+        <span><i style="background:var(--neutral)"></i>Neutral</span>
+        <span><i style="background:var(--nina)"></i>La Niña year</span>
+        <span style="color:var(--muted)">ENSO phase from the Aug–Oct ONI (≥ +0.5 El Niño, ≤ −0.5 La Niña). Click a bar to pick that year.</span>
+      </div>
+      <div id="annual" class="chart"></div>
+      <details>
+        <summary>Show as a table</summary>
+        <div class="table-scroll"><table id="annual-table"></table></div>
+      </details>
+    </div>
+    <div class="card span-5">
+      <h2 id="top-title">Provinces with the most hotspots</h2>
+      <p class="hint">National ranking for the selected year. Click a bar to filter.</p>
+      <div id="top" class="chart"></div>
+    </div>
+
+    <div class="card span-6">
+      <h2 id="month-title">Hotspots by month</h2>
+      <p class="hint" id="month-hint"></p>
+      <div id="month" class="chart"></div>
+    </div>
+    <div class="card span-6">
+      <h2 id="rain-title">Rainfall by month</h2>
+      <p class="hint" id="rain-hint"></p>
+      <div id="rain" class="chart"></div>
+    </div>
+
+    <div class="card span-6">
+      <h2>Dry-season rainfall vs hotspots</h2>
+      <p class="hint" id="scatter-hint"></p>
+      <div id="scatter" class="chart"></div>
+    </div>
+    <div class="card span-6">
+      <h2>Monthly hotspots and ENSO, 2003–2025</h2>
+      <p class="hint">Top: hotspots per month. Bottom: Oceanic Niño Index (red ≥ +0.5, blue ≤ −0.5).</p>
+      <div id="ts" class="chart"></div>
+    </div>
+  </section>
+
+  <footer>
+    <h3>About the data</h3>
+    <ul>
+      <li><b>Hotspots:</b> NASA FIRMS, MODIS Collection 6.1 (Terra + Aqua), yearly country archive for Indonesia. Kept: type 0 (presumed vegetation fire) and confidence ≥ 80. NASA promotes full and open use of its data (MODIS MCD14ML, doi:10.5067/FIRMS/MODIS/MCD14ML).</li>
+      <li><b>Rainfall:</b> CHIRPS v2.0 monthly (Funk et al. 2015; public domain), via the IRI/LDEO Data Library, averaged over each province.</li>
+      <li><b>ENSO:</b> NOAA Climate Prediction Center Oceanic Niño Index (public domain).</li>
+      <li><b>Provinces:</b> geoBoundaries IDN ADM1 (34 provinces, 2017 boundaries; ODbL 1.0, © OpenStreetMap contributors).</li>
+    </ul>
+    <h3>Read with care</h3>
+    <ul>
+      <li>A hotspot is a 1 km pixel where the satellite saw a fire at the moment it passed over. Smoke, clouds and short fires between passes are missed, and one large fire can make many hotspots.</li>
+      <li>Correlation is not causation: dry seasons and El Niño go with more hotspots, but most fires in Indonesia are lit by people, so land use and policy matter too.</li>
+    </ul>
+    <p>Built by Arya Perdana Putra Nasution.</p>
+  </footer>
+</div>
+
+<script src="data.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<script>
+(function () {
+  if (typeof Plotly === "undefined") {
+    document.getElementById("offline").style.display = "block";
+    return;
+  }
+  const D = window.KARHUTLA;
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const YEARS = D.years;
+  const NY = YEARS.length;
+  const N = D.pm.p.length;
+  const FIRE_IDX = D.fireProvinces.map(n => D.provinces.indexOf(n));
+  const state = { year: "all", prov: "all" };
+  const fmt = v => Math.round(v).toLocaleString("en-US");
+  const yi = y => y - YEARS[0];
+
+  // ---------- theme ----------
+  function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+  function isDark() { return css("color-scheme") === "dark"; }
+  function T() {
+    return {
+      ink: css("--ink"), ink2: css("--ink-2"), muted: css("--muted"), grid: css("--grid"),
+      axis: css("--axis"), surface: css("--surface"), fire: css("--fire"), nino: css("--nino"),
+      nina: css("--nina"), neutral: css("--neutral"), rain: css("--rain"), accent: css("--accent")
+    };
+  }
+  function phaseColor(t, phase) {
+    return phase === "El Niño" ? t.nino : phase === "La Niña" ? t.nina : t.neutral;
+  }
+  function axis(t, extra) {
+    return Object.assign({
+      gridcolor: t.grid, linecolor: t.axis, zeroline: false, tickfont: { color: t.muted },
+      title: { font: { color: t.ink2, size: 12 } }, automargin: true
+    }, extra || {});
+  }
+  function layout(t, extra) {
+    return Object.assign({
+      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+      font: { family: 'system-ui, -apple-system, "Segoe UI", sans-serif', size: 12, color: t.ink2 },
+      margin: { l: 8, r: 8, t: 8, b: 8 }, showlegend: false, bargap: 0.25,
+      hoverlabel: { bgcolor: t.surface, bordercolor: t.grid, font: { color: t.ink } }
+    }, extra);
+  }
+  const CONFIG = { responsive: true, displayModeBar: false };
+
+  // ---------- aggregation helpers ----------
+  const inProv = p => state.prov === "all" || p === state.prov;
+
+  // rainfall series for the selection: one province, or the mean of the main fire provinces
+  function rainOf(year, month) {
+    let s = 0, k = 0;
+    for (let i = 0; i < N; i++) {
+      if (D.pm.y[i] !== year || D.pm.m[i] !== month) continue;
+      const p = D.pm.p[i];
+      if (state.prov === "all" ? FIRE_IDX.includes(p) : p === state.prov) { s += D.pm.r[i]; k++; }
+    }
+    return k ? s / k : null;
+  }
+
+  // hotspots[yearIndex][month-1] for the selected province (or all), high confidence
+  function cube(key) {
+    const c = YEARS.map(() => new Array(12).fill(0));
+    for (let i = 0; i < N; i++) if (inProv(D.pm.p[i])) c[yi(D.pm.y[i])][D.pm.m[i] - 1] += D.pm[key][i];
+    return c;
+  }
+  const sum = a => a.reduce((x, y) => x + y, 0);
+  function median(a) {
+    const s = [...a].sort((x, y) => x - y), m = s.length >> 1;
+    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+  }
+  function ranks(a) {
+    const idx = a.map((v, i) => [v, i]).sort((x, y) => x[0] - y[0]);
+    const r = new Array(a.length);
+    for (let i = 0; i < idx.length;) {
+      let j = i; while (j + 1 < idx.length && idx[j + 1][0] === idx[i][0]) j++;
+      for (let k = i; k <= j; k++) r[idx[k][1]] = (i + j) / 2 + 1;
+      i = j + 1;
+    }
+    return r;
+  }
+  function spearman(x, y) {
+    const rx = ranks(x), ry = ranks(y), n = x.length;
+    const mx = sum(rx) / n, my = sum(ry) / n;
+    let num = 0, dx = 0, dy = 0;
+    for (let i = 0; i < n; i++) { num += (rx[i] - mx) * (ry[i] - my); dx += (rx[i] - mx) ** 2; dy += (ry[i] - my) ** 2; }
+    return num / Math.sqrt(dx * dy);
+  }
+  const placeName = () => state.prov === "all" ? "Indonesia" : D.provinces[state.prov];
+
+  // ---------- filters ----------
+  const fYear = document.getElementById("f-year");
+  const fProv = document.getElementById("f-prov");
+  fYear.innerHTML = '<option value="all">All years (2003–2025)</option>' +
+    [...YEARS].reverse().map(y => `<option value="${y}">${y}</option>`).join("");
+  let html = '<option value="all">All Indonesia</option>';
+  [...new Set(D.islands)].forEach(isl => {
+    html += `<optgroup label="${isl}">`;
+    D.provinces.forEach((p, i) => { if (D.islands[i] === isl) html += `<option value="${i}">${p}</option>`; });
+    html += "</optgroup>";
+  });
+  fProv.innerHTML = html;
+  fYear.onchange = () => { state.year = fYear.value === "all" ? "all" : +fYear.value; render(); };
+  fProv.onchange = () => { state.prov = fProv.value === "all" ? "all" : +fProv.value; render(); };
+  document.getElementById("reset").onclick = () => { state.year = "all"; state.prov = "all"; render(); };
+
+  // ---------- render ----------
+  function render() {
+    fYear.value = String(state.year);
+    fProv.value = String(state.prov);
+    const t = T();
+    const H = cube("h"), A = cube("a");
+    const yearly = H.map(sum), yearlyAll = A.map(sum);
+    const sel = state.year === "all" ? null : yi(state.year);
+    const total = sel === null ? sum(yearly) : yearly[sel];
+    const totalAll = sel === null ? sum(yearlyAll) : yearlyAll[sel];
+    const monthTot = new Array(12).fill(0);
+    (sel === null ? H : [H[sel]]).forEach(r => r.forEach((v, m) => monthTot[m] += v));
+    const avg12 = new Array(12).fill(0).map((_, m) => sum(H.map(r => r[m])) / NY);
+
+    // national per-province totals for the selected year (for KPI 3 and the ranking)
+    const provTot = new Array(D.provinces.length).fill(0);
+    for (let i = 0; i < N; i++) if (sel === null || D.pm.y[i] === state.year) provTot[D.pm.p[i]] += D.pm.h[i];
+    const national = sum(provTot);
+
+    kpis(t, total, totalAll, monthTot, provTot, national, yearly);
+    drawMap(t);
+    drawTop(t, provTot);
+    drawAnnual(t, yearly);
+    drawMonth(t, H, avg12, sel);
+    drawRain(t);
+    drawScatter(t, H);
+    drawTS(t, H);
+  }
+
+  function kpis(t, total, totalAll, monthTot, provTot, national, yearly) {
+    const period = state.year === "all" ? "2003–2025" : state.year;
+    document.getElementById("k1-label").textContent = `Hotspots, ${placeName()}`;
+    document.getElementById("k1").textContent = fmt(total);
+    document.getElementById("k1-sub").textContent =
+      `${period}, high confidence · ${fmt(totalAll)} at any confidence`;
+
+    const mt = sum(monthTot);
+    const bm = monthTot.indexOf(Math.max(...monthTot));
+    document.getElementById("k2").textContent = mt ? MONTHS[bm] : "–";
+    document.getElementById("k2-sub").textContent = mt
+      ? `${(100 * monthTot[bm] / mt).toFixed(0)}% of the hotspots; Aug–Oct: ${(100 * (monthTot[7] + monthTot[8] + monthTot[9]) / mt).toFixed(0)}%`
+      : "no hotspots in this selection";
+
+    if (state.prov === "all") {
+      const top = provTot.indexOf(Math.max(...provTot));
+      document.getElementById("k3-label").textContent = `Top province, ${period}`;
+      document.getElementById("k3").textContent = national ? D.provinces[top] : "–";
+      document.getElementById("k3-sub").textContent = national ? `${(100 * provTot[top] / national).toFixed(0)}% of the national total` : "";
+    } else {
+      document.getElementById("k3-label").textContent = `Share of national total, ${period}`;
+      document.getElementById("k3").textContent = national ? `${(100 * provTot[state.prov] / national).toFixed(1)}%` : "–";
+      const rank = [...provTot].sort((a, b) => b - a).indexOf(provTot[state.prov]) + 1;
+      document.getElementById("k3-sub").textContent = `rank ${rank} of ${D.provinces.length} provinces`;
+    }
+
+    if (state.year === "all") {
+      const nino = [], other = [];
+      YEARS.forEach((y, i) => (D.enso[y][0] === "El Niño" ? nino : other).push(yearly[i]));
+      document.getElementById("k4-label").textContent = "El Niño years vs other years";
+      const mo = median(other);
+      document.getElementById("k4").textContent = mo ? `${(median(nino) / mo).toFixed(1)}×` : "–";
+      document.getElementById("k4-sub").textContent =
+        `median ${fmt(median(nino))} vs ${fmt(mo)} hotspots per year (${nino.length} vs ${other.length} years)`;
+    } else {
+      const [phase, oni] = D.enso[state.year];
+      document.getElementById("k4-label").textContent = `ENSO in ${state.year}`;
+      document.getElementById("k4").textContent = phase;
+      document.getElementById("k4-sub").textContent = `Aug–Oct ONI ${oni > 0 ? "+" : ""}${oni.toFixed(1)} °C`;
+    }
+    // long words (province names) get a smaller font so they fit the tile
+    document.querySelectorAll(".kpi .value").forEach(v => v.classList.toggle("long", v.textContent.length > 10));
+  }
+
+  function drawMap(t) {
+    // A plain lon/lat plot (no tile server, no API key): province borders as
+    // filled outlines, hotspot grid cells as square markers on top.
+    const cells = new Map();
+    const g = D.grid;
+    for (let i = 0; i < g.n.length; i++) {
+      if (state.year !== "all" && g.y[i] !== state.year) continue;
+      if (!inProv(g.p[i])) continue;
+      const k = g.lat[i] + "," + g.lon[i];
+      cells.set(k, (cells.get(k) || 0) + g.n[i]);
+    }
+    const lat = [], lon = [], n = [];
+    [...cells.entries()].sort((a, b) => a[1] - b[1]).forEach(([k, v]) => {
+      const [a, b] = k.split(",").map(Number); lat.push(a); lon.push(b); n.push(v);
+    });
+    const el = document.getElementById("map");
+    // centre and zoom: whole country, or fitted to the selected province's cells
+    let lo0 = 95, lo1 = 141, la0 = -11, la1 = 6;
+    if (state.prov !== "all" && lat.length) {
+      lo0 = Math.min(...lon) - 0.5; lo1 = Math.max(...lon) + 0.5;
+      la0 = Math.min(...lat) - 0.5; la1 = Math.max(...lat) + 0.5;
+    }
+    // keep the map's shape: widen whichever range is too narrow for the box
+    const w = el.clientWidth || 600, h = el.clientHeight || 400;
+    const cx = (lo0 + lo1) / 2, cy = (la0 + la1) / 2;
+    const ppd = Math.min(w / (lo1 - lo0), h / (la1 - la0));  // pixels per degree
+    lo0 = cx - w / ppd / 2; lo1 = cx + w / ppd / 2;
+    la0 = cy - h / ppd / 2; la1 = cy + h / ppd / 2;
+    const cellPx = Math.max(3, ppd * 0.25);
+    const O = D.outline;
+    const sel = { lon: [], lat: [] };
+    if (state.prov !== "all") {
+      O.p.forEach((p, i) => { if (p === state.prov) { sel.lon.push(O.lon[i]); sel.lat.push(O.lat[i]); } });
+    }
+    const ramp = isDark()
+      ? [[0, "#4a2414"], [0.35, "#8f3a17"], [0.7, "#d95926"], [1, "#f6c3a6"]]
+      : [[0, "#fde3d3"], [0.35, "#f6a77f"], [0.7, "#eb6834"], [1, "#7a2a0e"]];
+    const maxLog = Math.max(1, Math.log10(Math.max(...n, 10)));
+    const tickVals = [0, 1, 2, 3, 4].filter(v => v <= Math.ceil(maxLog));
+    Plotly.react(el, [{
+      type: "scatter", mode: "lines", x: O.lon, y: O.lat, fill: "toself",
+      fillcolor: css("--land"), line: { color: t.axis, width: 0.6 }, hoverinfo: "skip"
+    }, {
+      type: "scatter", mode: "lines", x: sel.lon, y: sel.lat,
+      line: { color: t.ink, width: 1.4 }, hoverinfo: "skip"
+    }, {
+      type: "scatter", x: lon, y: lat,
+      mode: "markers",
+      marker: {
+        symbol: "square", size: cellPx, opacity: 0.95, line: { width: 0 },
+        color: n.map(v => Math.log10(v)), colorscale: ramp, cmin: 0, cmax: maxLog,
+        colorbar: {
+          title: { text: "hotspots", font: { color: t.ink2, size: 11 } }, thickness: 10,
+          tickvals: tickVals, ticktext: tickVals.map(v => fmt(10 ** v)), tickfont: { color: t.muted },
+          outlinewidth: 0, x: 0.02, xanchor: "left", y: 0.04, yanchor: "bottom", len: 0.45,
+          bgcolor: "rgba(0,0,0,0)"  // bottom-left corner = open ocean
+        }
+      },
+      text: n.map(v => fmt(v)),
+      hovertemplate: "%{text} hotspots<br>cell centre %{y:.2f}°, %{x:.2f}°E<extra></extra>"
+    }], layout(t, {
+      xaxis: { range: [lo0, lo1], visible: false, fixedrange: false },
+      yaxis: { range: [la0, la1], visible: false, scaleanchor: "x", scaleratio: 1 },
+      margin: { l: 0, r: 0, t: 0, b: 0 },
+      dragmode: "pan",
+      uirevision: `${state.prov}`  // keep the user's pan/zoom while only the year changes
+    }), Object.assign({}, CONFIG, { scrollZoom: true }));
+  }
+
+  function drawTop(t, provTot) {
+    const order = provTot.map((v, i) => [v, i]).sort((a, b) => b[0] - a[0]).slice(0, 12).reverse();
+    if (state.prov !== "all" && !order.some(o => o[1] === state.prov)) order.unshift([provTot[state.prov], state.prov]);
+    const national = sum(provTot);
+    document.getElementById("top-title").textContent =
+      `Provinces with the most hotspots, ${state.year === "all" ? "2003–2025" : state.year}`;
+    const el = document.getElementById("top");
+    Plotly.react(el, [{
+      type: "bar", orientation: "h",
+      x: order.map(o => o[0]), y: order.map(o => D.provinces[o[1]]),
+      customdata: order.map(o => o[1]),
+      marker: { color: order.map(o => state.prov === "all" || o[1] === state.prov ? t.fire : t.neutral) },
+      text: order.map(o => national ? ` ${(100 * o[0] / national).toFixed(0)}%` : ""),
+      textposition: "outside", cliponaxis: false, textfont: { color: t.ink2, size: 11 },
+      hovertemplate: "%{y}: %{x:,} hotspots<extra></extra>"
+    }], layout(t, {
+      xaxis: axis(t, { showgrid: true, tickformat: "~s" }),
+      yaxis: axis(t, { showgrid: false, tickfont: { color: t.ink2 } }),
+      margin: { l: 8, r: 36, t: 4, b: 8 }
+    }), CONFIG);
+    el.removeAllListeners && el.removeAllListeners("plotly_click");
+    el.on("plotly_click", ev => {
+      const p = ev.points[0].customdata;
+      state.prov = state.prov === p ? "all" : p; render();
+    });
+  }
+
+  function drawAnnual(t, yearly) {
+    document.getElementById("annual-title").textContent = `Hotspots per year, ${placeName()}`;
+    const el = document.getElementById("annual");
+    const colors = YEARS.map(y => phaseColor(t, D.enso[y][0]));
+    Plotly.react(el, [{
+      type: "bar", x: YEARS, y: yearly,
+      marker: {
+        color: colors,
+        opacity: YEARS.map(y => state.year === "all" || y === state.year ? 1 : 0.35)
+      },
+      customdata: YEARS.map(y => [D.enso[y][0], D.enso[y][1].toFixed(1)]),
+      hovertemplate: "%{x}: %{y:,} hotspots<br>%{customdata[0]}, Aug–Oct ONI %{customdata[1]}<extra></extra>"
+    }], layout(t, {
+      xaxis: axis(t, { showgrid: false, dtick: 2, tickfont: { color: t.muted } }),
+      yaxis: axis(t, { tickformat: "~s", title: { text: "hotspots", font: { color: t.ink2, size: 12 } } }),
+      margin: { l: 8, r: 8, t: 6, b: 8 }
+    }), CONFIG);
+    el.removeAllListeners && el.removeAllListeners("plotly_click");
+    el.on("plotly_click", ev => {
+      const y = ev.points[0].x;
+      state.year = state.year === y ? "all" : y; render();
+    });
+    document.getElementById("annual-table").innerHTML =
+      "<tr><th>Year</th><th>Hotspots</th><th>ENSO phase</th><th>Aug–Oct ONI</th></tr>" +
+      YEARS.map((y, i) => `<tr><td>${y}</td><td>${fmt(yearly[i])}</td><td>${D.enso[y][0]}</td><td>${D.enso[y][1].toFixed(1)}</td></tr>`).join("");
+  }
+
+  function drawMonth(t, H, avg12, sel) {
+    const el = document.getElementById("month");
+    const traces = [];
+    if (sel === null) {
+      document.getElementById("month-title").textContent = `Hotspots by month, ${placeName()}`;
+      document.getElementById("month-hint").textContent = "Average per year, 2003–2025.";
+      traces.push({ type: "bar", x: MONTHS, y: avg12, marker: { color: t.fire },
+        hovertemplate: "%{x}: %{y:,.0f} hotspots (mean per year)<extra></extra>" });
+    } else {
+      document.getElementById("month-title").textContent = `Hotspots by month, ${placeName()}, ${state.year}`;
+      document.getElementById("month-hint").textContent = "Bars: selected year. Line: 2003–2025 average.";
+      traces.push({ type: "bar", x: MONTHS, y: H[sel], marker: { color: t.fire }, name: String(state.year),
+        hovertemplate: `%{x} ${state.year}: %{y:,} hotspots<extra></extra>` });
+      traces.push({ type: "scatter", mode: "lines+markers", x: MONTHS, y: avg12, name: "2003–2025 average",
+        line: { color: t.ink2, width: 2, dash: "dot" }, marker: { size: 6, color: t.ink2 },
+        hovertemplate: "%{x} average: %{y:,.0f}<extra></extra>" });
+    }
+    Plotly.react(el, traces, layout(t, {
+      xaxis: axis(t, { showgrid: false }),
+      yaxis: axis(t, { tickformat: "~s", rangemode: "tozero" }),
+      hovermode: "x unified"
+    }), CONFIG);
+  }
+
+  function drawRain(t) {
+    const el = document.getElementById("rain");
+    const where = state.prov === "all" ? `mean of the ${FIRE_IDX.length} main fire provinces` : D.provinces[state.prov];
+    const avg = MONTHS.map((_, m) => sum(YEARS.map(y => rainOf(y, m + 1))) / NY);
+    const traces = [{
+      type: "scatter", mode: "lines+markers", x: MONTHS, y: avg, name: "2003–2025 average",
+      line: { color: state.year === "all" ? t.rain : t.ink2, width: 2, dash: state.year === "all" ? "solid" : "dot" },
+      marker: { size: 6, color: state.year === "all" ? t.rain : t.ink2 },
+      hovertemplate: "%{x} average: %{y:.0f} mm<extra></extra>"
+    }];
+    if (state.year !== "all") {
+      traces.push({
+        type: "scatter", mode: "lines+markers", x: MONTHS, y: MONTHS.map((_, m) => rainOf(state.year, m + 1)),
+        name: String(state.year), line: { color: t.rain, width: 2 }, marker: { size: 7, color: t.rain },
+        hovertemplate: `%{x} ${state.year}: %{y:.0f} mm<extra></extra>`
+      });
+    }
+    document.getElementById("rain-title").textContent =
+      `Rainfall by month${state.year === "all" ? "" : ", " + state.year}`;
+    document.getElementById("rain-hint").textContent =
+      `CHIRPS, ${where}. ${state.year === "all" ? "Average 2003–2025." : "Solid: selected year. Dotted: 2003–2025 average."}`;
+    Plotly.react(el, traces, layout(t, {
+      xaxis: axis(t, { showgrid: false }),
+      yaxis: axis(t, { rangemode: "tozero", title: { text: "mm per month", font: { color: t.ink2, size: 12 } } }),
+      hovermode: "x unified"
+    }), CONFIG);
+  }
+
+  function drawScatter(t, H) {
+    // Aug–Oct rainfall and hotspots, one point per year
+    const rain = [], fires = [];
+    YEARS.forEach((y, i) => {
+      rain.push(rainOf(y, 8) + rainOf(y, 9) + rainOf(y, 10));
+      if (state.prov === "all") {
+        let s = 0;
+        for (let k = 0; k < N; k++)
+          if (D.pm.y[k] === y && D.pm.m[k] >= 8 && D.pm.m[k] <= 10 && FIRE_IDX.includes(D.pm.p[k])) s += D.pm.h[k];
+        fires.push(s);
+      } else {
+        fires.push(H[i][7] + H[i][8] + H[i][9]);
+      }
+    });
+    const rho = spearman(rain, fires);
+    const useLog = Math.min(...fires) > 0;
+    document.getElementById("scatter-hint").textContent =
+      (state.prov === "all"
+        ? `The ${FIRE_IDX.length} main fire provinces together (mean rainfall, summed hotspots), Aug–Oct of each year.`
+        : `${D.provinces[state.prov]}, Aug–Oct of each year.`) +
+      ` Spearman ρ = ${isFinite(rho) ? rho.toFixed(2) : "n/a"} (n = ${NY}).`;
+    Plotly.react(document.getElementById("scatter"), [{
+      type: "scatter", mode: "markers+text", x: rain, y: fires,
+      text: YEARS.map(y => (state.year === y || fires[yi(y)] >= median(fires) * 4) ? String(y) : ""),
+      textposition: "top right", textfont: { size: 10, color: t.ink2 },
+      marker: {
+        size: YEARS.map(y => y === state.year ? 14 : 10),
+        color: YEARS.map(y => phaseColor(t, D.enso[y][0])),
+        line: { width: YEARS.map(y => y === state.year ? 2.5 : 1.5), color: YEARS.map(y => y === state.year ? t.ink : t.surface) }
+      },
+      customdata: YEARS.map(y => [y, D.enso[y][0]]),
+      hovertemplate: "%{customdata[0]} (%{customdata[1]})<br>Aug–Oct rain: %{x:.0f} mm<br>Aug–Oct hotspots: %{y:,}<extra></extra>"
+    }], layout(t, {
+      xaxis: axis(t, { title: { text: "Aug–Oct rainfall (mm)", font: { color: t.ink2, size: 12 } } }),
+      yaxis: axis(t, {
+        type: useLog ? "log" : "linear", tickformat: useLog ? "~s" : ",",
+        title: { text: "Aug–Oct hotspots" + (useLog ? " (log)" : ""), font: { color: t.ink2, size: 12 } }
+      })
+    }), CONFIG);
+  }
+
+  function drawTS(t, H) {
+    const x = [], y = [];
+    YEARS.forEach((yr, i) => H[i].forEach((v, m) => { x.push(`${yr}-${String(m + 1).padStart(2, "0")}-15`); y.push(v); }));
+    const ox = D.oni.y.map((yr, i) => `${yr}-${String(D.oni.m[i]).padStart(2, "0")}-15`);
+    const shapes = state.year === "all" ? [] : [{
+      type: "rect", xref: "x", yref: "paper", x0: `${state.year}-01-01`, x1: `${state.year}-12-31`, y0: 0, y1: 1,
+      fillcolor: t.grid, opacity: 0.6, line: { width: 0 }, layer: "below"
+    }];
+    Plotly.react(document.getElementById("ts"), [
+      { type: "scatter", mode: "lines", x, y, line: { color: t.fire, width: 1.5 }, xaxis: "x", yaxis: "y",
+        hovertemplate: "%{x|%b %Y}: %{y:,} hotspots<extra></extra>" },
+      { type: "bar", x: ox, y: D.oni.v, xaxis: "x", yaxis: "y2",
+        marker: { color: D.oni.v.map(v => v >= 0.5 ? t.nino : v <= -0.5 ? t.nina : t.neutral) },
+        hovertemplate: "%{x|%b %Y}: ONI %{y:.1f}<extra></extra>" }
+    ], layout(t, {
+      bargap: 0,
+      shapes,
+      xaxis: axis(t, { showgrid: false, anchor: "y2", type: "date" }),
+      yaxis: axis(t, { domain: [0.36, 1], tickformat: "~s", title: { text: "hotspots", font: { color: t.ink2, size: 12 } } }),
+      yaxis2: axis(t, { domain: [0, 0.26], zeroline: true, zerolinecolor: t.axis, title: { text: "ONI °C", font: { color: t.ink2, size: 12 } } }),
+      margin: { l: 8, r: 8, t: 6, b: 8 }
+    }), CONFIG);
+  }
+
+  render();
+  // redraw with the other palette when the OS switches between light and dark
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
+})();
+</script>
+</body>
+</html>
